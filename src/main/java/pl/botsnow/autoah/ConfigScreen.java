@@ -9,121 +9,183 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.registry.Registries;
 import net.minecraft.text.Text;
 
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 
 public class ConfigScreen extends Screen {
+    private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm:ss").withZone(ZoneId.systemDefault());
+
     private final Screen parent;
     private int selectedIndex = 0;
 
+    private TextFieldWidget ruleNameField;
     private TextFieldWidget itemIdField;
     private TextFieldWidget loreField;
     private TextFieldWidget enchantsField;
     private TextFieldWidget priceField;
+
     private TextFieldWidget webhookField;
+    private TextFieldWidget reconnectAddressField;
+    private TextFieldWidget reconnectDelayField;
+    private TextFieldWidget loginPasswordField;
+
+    private ButtonWidget ruleEnabledButton;
+    private ButtonWidget autoReconnectButton;
+    private ButtonWidget autoLoginButton;
 
     protected ConfigScreen(Screen parent) {
-        super(Text.literal("BotSnow AutoAH"));
+        super(Text.literal("BotSnow AutoAH Panel"));
         this.parent = parent;
     }
 
     @Override
     protected void init() {
-        int centerX = width / 2;
-        int y = height / 2 - 90;
+        int left = width / 2 - 190;
+        int top = 28;
 
-        itemIdField = addDrawableChild(new TextFieldWidget(textRenderer, centerX - 150, y, 300, 20, Text.literal("Item ID")));
-        itemIdField.setMaxLength(128);
-        y += 24;
+        ruleNameField = addTextField(left + 12, top + 24, 170, "Nazwa reguły");
+        itemIdField = addTextField(left + 12, top + 50, 170, "Item ID");
+        loreField = addTextField(left + 12, top + 76, 170, "Lore contains");
+        enchantsField = addTextField(left + 12, top + 102, 170, "Enchanty (,) ");
+        priceField = addTextField(left + 12, top + 128, 170, "Max cena");
 
-        loreField = addDrawableChild(new TextFieldWidget(textRenderer, centerX - 150, y, 300, 20, Text.literal("Lore contains")));
-        loreField.setMaxLength(200);
-        y += 24;
+        webhookField = addTextField(left + 198, top + 24, 170, "Webhook URL");
+        reconnectAddressField = addTextField(left + 198, top + 50, 170, "Adres reconnect");
+        reconnectDelayField = addTextField(left + 198, top + 76, 170, "Delay (sekundy)");
+        loginPasswordField = addTextField(left + 198, top + 102, 170, "Hasło /login");
 
-        enchantsField = addDrawableChild(new TextFieldWidget(textRenderer, centerX - 150, y, 300, 20, Text.literal("Enchanty (po przecinku)")));
-        enchantsField.setMaxLength(200);
-        y += 24;
+        ruleEnabledButton = addDrawableChild(ButtonWidget.builder(Text.literal(""), b -> {
+            RuleEntry entry = currentRule();
+            entry.enabled = !entry.enabled;
+            refreshButtons();
+        }).dimensions(left + 12, top + 154, 170, 20).build());
 
-        priceField = addDrawableChild(new TextFieldWidget(textRenderer, centerX - 150, y, 300, 20, Text.literal("Max cena")));
-        priceField.setMaxLength(32);
-        y += 24;
+        autoReconnectButton = addDrawableChild(ButtonWidget.builder(Text.literal(""), b -> {
+            AutoAhConfig.autoReconnect = !AutoAhConfig.autoReconnect;
+            refreshButtons();
+        }).dimensions(left + 198, top + 128, 170, 20).build());
 
-        webhookField = addDrawableChild(new TextFieldWidget(textRenderer, centerX - 150, y, 300, 20, Text.literal("Webhook URL")));
-        webhookField.setText(AutoAhConfig.webhookUrl);
-        webhookField.setMaxLength(300);
-        y += 28;
+        autoLoginButton = addDrawableChild(ButtonWidget.builder(Text.literal(""), b -> {
+            AutoAhConfig.autoLogin = !AutoAhConfig.autoLogin;
+            refreshButtons();
+        }).dimensions(left + 198, top + 154, 170, 20).build());
 
-        addDrawableChild(ButtonWidget.builder(Text.literal("Poprzedni"), b -> {
+        addDrawableChild(ButtonWidget.builder(Text.literal("◀ Reguła"), b -> {
+            saveAll();
             selectedIndex = Math.max(0, selectedIndex - 1);
             loadSelected();
-        }).dimensions(centerX - 150, y, 95, 20).build());
+        }).dimensions(left + 12, top + 182, 82, 20).build());
 
-        addDrawableChild(ButtonWidget.builder(Text.literal("Następny"), b -> {
+        addDrawableChild(ButtonWidget.builder(Text.literal("Reguła ▶"), b -> {
+            saveAll();
             selectedIndex = Math.min(AutoAhConfig.RULES.size() - 1, selectedIndex + 1);
             loadSelected();
-        }).dimensions(centerX - 50, y, 95, 20).build());
+        }).dimensions(left + 100, top + 182, 82, 20).build());
 
-        addDrawableChild(ButtonWidget.builder(Text.literal("Nowa reguła"), b -> {
-            AutoAhConfig.RULES.add(new RuleEntry());
+        addDrawableChild(ButtonWidget.builder(Text.literal("+ Dodaj"), b -> {
+            saveAll();
+            RuleEntry entry = new RuleEntry();
+            entry.name = "Reguła " + (AutoAhConfig.RULES.size() + 1);
+            AutoAhConfig.RULES.add(entry);
             selectedIndex = AutoAhConfig.RULES.size() - 1;
             loadSelected();
-        }).dimensions(centerX + 50, y, 95, 20).build());
+        }).dimensions(left + 12, top + 206, 82, 20).build());
 
-        y += 24;
-
-        addDrawableChild(ButtonWidget.builder(Text.literal("Usuń regułę"), b -> {
+        addDrawableChild(ButtonWidget.builder(Text.literal("- Usuń"), b -> {
             if (AutoAhConfig.RULES.size() > 1) {
                 AutoAhConfig.RULES.remove(selectedIndex);
                 selectedIndex = Math.max(0, selectedIndex - 1);
                 loadSelected();
             }
-        }).dimensions(centerX - 150, y, 95, 20).build());
+        }).dimensions(left + 100, top + 206, 82, 20).build());
 
-        addDrawableChild(ButtonWidget.builder(Text.literal("Zapisz"), b -> saveAll()).dimensions(centerX - 50, y, 95, 20).build());
-
-        addDrawableChild(ButtonWidget.builder(Text.literal("Wróć"), b -> close()).dimensions(centerX + 50, y, 95, 20).build());
+        addDrawableChild(ButtonWidget.builder(Text.literal("ZAPISZ"), b -> saveAll()).dimensions(left + 198, top + 182, 82, 20).build());
+        addDrawableChild(ButtonWidget.builder(Text.literal("ZAMKNIJ"), b -> close()).dimensions(left + 286, top + 182, 82, 20).build());
 
         loadSelected();
+        refreshButtons();
+    }
+
+    private TextFieldWidget addTextField(int x, int y, int width, String placeholder) {
+        TextFieldWidget field = addDrawableChild(new TextFieldWidget(textRenderer, x, y, width, 20, Text.literal(placeholder)));
+        field.setPlaceholder(Text.literal(placeholder));
+        field.setMaxLength(300);
+        return field;
+    }
+
+    private RuleEntry currentRule() {
+        if (AutoAhConfig.RULES.isEmpty()) {
+            AutoAhConfig.RULES.add(new RuleEntry());
+        }
+        if (selectedIndex < 0 || selectedIndex >= AutoAhConfig.RULES.size()) {
+            selectedIndex = 0;
+        }
+        return AutoAhConfig.RULES.get(selectedIndex);
     }
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (button == 2 && client != null && client.currentScreen != null && client.currentScreen == this) {
-            ItemStack hovered = getItemFromCrosshair();
+        if (button == 2) {
+            ItemStack hovered = getItemFromMainHand();
             if (!hovered.isEmpty()) {
                 itemIdField.setText(Registries.ITEM.getId(hovered.getItem()).toString());
+                if (ruleNameField.getText().isBlank()) {
+                    ruleNameField.setText(hovered.getName().getString());
+                }
             }
         }
         return super.mouseClicked(mouseX, mouseY, button);
     }
 
-    private ItemStack getItemFromCrosshair() {
-        if (client == null || client.player == null) return ItemStack.EMPTY;
+    private ItemStack getItemFromMainHand() {
+        if (client == null || client.player == null) {
+            return ItemStack.EMPTY;
+        }
         List<Text> lines = new ArrayList<>(client.player.getMainHandStack().getTooltip(client.player, TooltipContext.BASIC));
-        if (lines.isEmpty()) return ItemStack.EMPTY;
+        if (lines.isEmpty()) {
+            return ItemStack.EMPTY;
+        }
         return client.player.getMainHandStack();
     }
 
     private void loadSelected() {
-        if (AutoAhConfig.RULES.isEmpty()) {
-            AutoAhConfig.RULES.add(new RuleEntry());
-        }
-
-        RuleEntry entry = AutoAhConfig.RULES.get(selectedIndex);
+        RuleEntry entry = currentRule();
+        ruleNameField.setText(entry.name);
         itemIdField.setText(entry.itemId);
         loreField.setText(entry.loreContains);
         enchantsField.setText(String.join(",", entry.requiredEnchants));
         priceField.setText(String.valueOf(entry.maxPrice));
+
+        webhookField.setText(AutoAhConfig.webhookUrl);
+        reconnectAddressField.setText(AutoAhConfig.reconnectAddress);
+        reconnectDelayField.setText(String.valueOf(AutoAhConfig.reconnectDelaySeconds));
+        loginPasswordField.setText(AutoAhConfig.loginPassword);
+
+        refreshButtons();
+    }
+
+    private void refreshButtons() {
+        RuleEntry entry = currentRule();
+        ruleEnabledButton.setMessage(Text.literal("Reguła: " + (entry.enabled ? "AKTYWNA" : "WYŁĄCZONA")));
+        autoReconnectButton.setMessage(Text.literal("Reconnect: " + (AutoAhConfig.autoReconnect ? "ON" : "OFF")));
+        autoLoginButton.setMessage(Text.literal("AutoLogin: " + (AutoAhConfig.autoLogin ? "ON" : "OFF")));
     }
 
     private void saveAll() {
-        RuleEntry entry = AutoAhConfig.RULES.get(selectedIndex);
+        RuleEntry entry = currentRule();
+        entry.name = ruleNameField.getText().trim().isBlank() ? "Reguła " + (selectedIndex + 1) : ruleNameField.getText().trim();
         entry.itemId = itemIdField.getText().trim();
         entry.loreContains = loreField.getText().trim();
+
         entry.requiredEnchants = new ArrayList<>();
         for (String part : enchantsField.getText().split(",")) {
             String s = part.trim();
-            if (!s.isBlank()) entry.requiredEnchants.add(s);
+            if (!s.isBlank()) {
+                entry.requiredEnchants.add(s);
+            }
         }
 
         try {
@@ -133,7 +195,16 @@ public class ConfigScreen extends Screen {
         }
 
         AutoAhConfig.webhookUrl = webhookField.getText().trim();
+        AutoAhConfig.reconnectAddress = reconnectAddressField.getText().trim().isBlank() ? "anarchia.gg" : reconnectAddressField.getText().trim();
+        try {
+            AutoAhConfig.reconnectDelaySeconds = Math.max(1, Integer.parseInt(reconnectDelayField.getText().trim()));
+        } catch (NumberFormatException e) {
+            AutoAhConfig.reconnectDelaySeconds = 3;
+        }
+        AutoAhConfig.loginPassword = loginPasswordField.getText().trim();
+
         AutoAhConfig.save();
+        refreshButtons();
     }
 
     @Override
@@ -147,15 +218,33 @@ public class ConfigScreen extends Screen {
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
         renderBackground(context, mouseX, mouseY, delta);
+
+        int left = width / 2 - 190;
+        int top = 28;
+        int right = left + 380;
+        int bottom = top + 248;
+
+        context.fill(left - 2, top - 2, right + 2, bottom + 2, 0xFF1A1A1A);
+        context.fill(left, top, right, bottom, 0xCC101A2A);
+
+        context.fill(left + 8, top + 20, left + 186, top + 230, 0x66356BFF);
+        context.fill(left + 194, top + 20, right - 8, top + 230, 0x66FF4FA3);
+
         super.render(context, mouseX, mouseY, delta);
 
-        int centerX = width / 2;
-        context.drawCenteredTextWithShadow(textRenderer, title, centerX, height / 2 - 110, 0xFFFFFF);
-        context.drawTextWithShadow(textRenderer,
-                "Reguła: " + (selectedIndex + 1) + "/" + AutoAhConfig.RULES.size() + " | AutoAH: " + (AutoAhConfig.enabled ? "ON" : "OFF"),
-                centerX - 150, height / 2 + 85, 0xA0FFA0);
-        context.drawTextWithShadow(textRenderer,
-                "Middle click = ustaw item z main-hand. Toggle key i GUI key są w keybinds.",
-                centerX - 150, height / 2 + 100, 0xBBBBBB);
+        context.drawCenteredTextWithShadow(textRenderer, Text.literal("§l§bBotSnow AutoAH §dControl Center"), width / 2, top + 6, 0xFFFFFF);
+        context.drawTextWithShadow(textRenderer, Text.literal("Reguła " + (selectedIndex + 1) + "/" + AutoAhConfig.RULES.size()), left + 12, top + 6, 0xFFE082);
+        context.drawTextWithShadow(textRenderer, Text.literal("AutoAH: " + (AutoAhConfig.enabled ? "§aON" : "§cOFF") + "  (toggle w keybinds)"), left + 194, top + 6, 0xFFFFFF);
+
+        context.drawTextWithShadow(textRenderer, Text.literal("§eOstatnie 5 zakupów:"), left + 194, top + 208, 0xFFFFFF);
+        int rowY = top + 220;
+        for (PurchaseRecord record : RuntimeState.getPurchases()) {
+            String when = record.timeEpochMs > 0 ? TIME_FORMAT.format(Instant.ofEpochMilli(record.timeEpochMs)) : "--:--:--";
+            String line = "§7[" + when + "] §a" + record.itemName + " §fza §6" + record.price;
+            context.drawTextWithShadow(textRenderer, Text.literal(line), left + 194, rowY, 0xFFFFFF);
+            rowY += 10;
+        }
+
+        context.drawTextWithShadow(textRenderer, Text.literal("§7Middle Click = item z main-hand do reguły"), left + 12, top + 232, 0xFFFFFF);
     }
 }

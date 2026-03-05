@@ -1,15 +1,20 @@
-# BotSnow AutoAH Mod (Fabric)
+# BotSnow AutoAH Mod (Fabric, 1.20.1)
 
-Mod klientowy do automatycznego skanowania `/ah` i szybkiego kupowania przedmiotów według reguł ustawianych w GUI.
+Duży, rozbudowany mod klientowy do AH:
+- keybind do GUI,
+- keybind do start/stop AutoAH,
+- zaawansowane reguły kupna,
+- ultra szybkie odświeżanie (`iron_axe`) + potwierdzanie (`lime_dye`),
+- historia ostatnich 5 zakupów,
+- webhook po zakupie,
+- auto reconnect na `anarchia.gg`,
+- auto `/login <hasło>` po wejściu.
 
-## Funkcje
-- Keybind do otwarcia GUI konfiguracji.
-- Keybind do włączenia/wyłączenia AutoAH.
-- Reguły zakupu: item, lore, enchanty, maksymalna cena.
-- Dodawanie reguły przez „złapanie” itemu spod kursora (scroll click / middle mouse).
-- Edycja i usuwanie reguł.
-- Bardzo szybkie klikanie slotów (silnik tickowy) oraz potwierdzenie na `minecraft:lime_dye`.
-- Webhook Discord po udanym zakupie.
+## Najważniejsze elementy
+- **Reguły**: nazwa, item id, lore, enchanty, max cena, aktywna/wyłączona.
+- **GUI**: kolorowe panele, sekcja reguł, sekcja ustawień globalnych, sekcja historii zakupów.
+- **Middle click**: przypisanie itemu do reguły z main hand.
+- **Reconnect/Login**: osobne przełączniki i konfiguracja.
 
 ## Uwaga
-To jest baza moda gotowa do dalszego dopracowania pod konkretny serwer (format ceny, układ GUI AH, zabezpieczenia anty-cheat).
+To nadal klientowy mod automatyzujący interakcje GUI. Dla stabilności i bezpieczeństwa dopracuj timingi pod konkretny serwer.

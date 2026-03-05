@@ -9,8 +9,6 @@ import net.minecraft.client.util.InputUtil;
 import org.lwjgl.glfw.GLFW;
 
 public class AutoAhMod implements ClientModInitializer {
-    public static final String MOD_ID = "botsnow_autoah";
-
     private static KeyBinding openGuiKey;
     private static KeyBinding toggleAutoAhKey;
 
@@ -44,6 +42,7 @@ public class AutoAhMod implements ClientModInitializer {
             AutoAhEngine.toggle(client.player);
         }
 
+        AutoReconnectManager.tick(client);
         AutoAhEngine.tick(client);
     }
 }
