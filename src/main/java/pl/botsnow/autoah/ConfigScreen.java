@@ -8,16 +8,18 @@ import net.minecraft.client.item.TooltipContext;
 import net.minecraft.item.ItemStack;
 import net.minecraft.registry.Registries;
 import net.minecraft.text.Text;
+import pl.botsnow.autoah.loop.LoopExecutionStats;
+import pl.botsnow.autoah.widget.HistoryRowFormatter;
+import pl.botsnow.autoah.widget.UiHintMessages;
+import pl.botsnow.autoah.widget.UiSectionTitles;
+import pl.botsnow.autoah.widget.UiText;
+import pl.botsnow.autoah.widget.WidgetMetrics;
+import pl.botsnow.autoah.widget.WidgetTextPalette;
 
-import java.time.Instant;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 
 public class ConfigScreen extends Screen {
-    private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm:ss").withZone(ZoneId.systemDefault());
-
     private final Screen parent;
     private int selectedIndex = 0;
 
@@ -31,6 +33,7 @@ public class ConfigScreen extends Screen {
     private TextFieldWidget reconnectAddressField;
     private TextFieldWidget reconnectDelayField;
     private TextFieldWidget loginPasswordField;
+    private TextFieldWidget axeCpsField;
 
     private ButtonWidget ruleEnabledButton;
     private ButtonWidget autoReconnectButton;
@@ -56,6 +59,7 @@ public class ConfigScreen extends Screen {
         reconnectAddressField = addTextField(left + 198, top + 50, 170, "Adres reconnect");
         reconnectDelayField = addTextField(left + 198, top + 76, 170, "Delay (sekundy)");
         loginPasswordField = addTextField(left + 198, top + 102, 170, "Hasło /login");
+        axeCpsField = addTextField(left + 198, top + 128, 170, "Axe CPS (10-400)");
 
         ruleEnabledButton = addDrawableChild(ButtonWidget.builder(Text.literal(""), b -> {
             RuleEntry entry = currentRule();
@@ -66,12 +70,12 @@ public class ConfigScreen extends Screen {
         autoReconnectButton = addDrawableChild(ButtonWidget.builder(Text.literal(""), b -> {
             AutoAhConfig.autoReconnect = !AutoAhConfig.autoReconnect;
             refreshButtons();
-        }).dimensions(left + 198, top + 128, 170, 20).build());
+        }).dimensions(left + 198, top + 154, 170, 20).build());
 
         autoLoginButton = addDrawableChild(ButtonWidget.builder(Text.literal(""), b -> {
             AutoAhConfig.autoLogin = !AutoAhConfig.autoLogin;
             refreshButtons();
-        }).dimensions(left + 198, top + 154, 170, 20).build());
+        }).dimensions(left + 198, top + 178, 170, 20).build());
 
         addDrawableChild(ButtonWidget.builder(Text.literal("◀ Reguła"), b -> {
             saveAll();
@@ -102,8 +106,8 @@ public class ConfigScreen extends Screen {
             }
         }).dimensions(left + 100, top + 206, 82, 20).build());
 
-        addDrawableChild(ButtonWidget.builder(Text.literal("ZAPISZ"), b -> saveAll()).dimensions(left + 198, top + 182, 82, 20).build());
-        addDrawableChild(ButtonWidget.builder(Text.literal("ZAMKNIJ"), b -> close()).dimensions(left + 286, top + 182, 82, 20).build());
+        addDrawableChild(ButtonWidget.builder(Text.literal("ZAPISZ"), b -> saveAll()).dimensions(left + 198, top + 206, 82, 20).build());
+        addDrawableChild(ButtonWidget.builder(Text.literal("ZAMKNIJ"), b -> close()).dimensions(left + 286, top + 206, 82, 20).build());
 
         loadSelected();
         refreshButtons();
@@ -163,6 +167,7 @@ public class ConfigScreen extends Screen {
         reconnectAddressField.setText(AutoAhConfig.reconnectAddress);
         reconnectDelayField.setText(String.valueOf(AutoAhConfig.reconnectDelaySeconds));
         loginPasswordField.setText(AutoAhConfig.loginPassword);
+        axeCpsField.setText(String.valueOf(AutoAhConfig.axeClicksPerSecond));
 
         refreshButtons();
     }
@@ -202,6 +207,11 @@ public class ConfigScreen extends Screen {
             AutoAhConfig.reconnectDelaySeconds = 3;
         }
         AutoAhConfig.loginPassword = loginPasswordField.getText().trim();
+        try {
+            AutoAhConfig.axeClicksPerSecond = Math.max(10, Math.min(400, Integer.parseInt(axeCpsField.getText().trim())));
+        } catch (NumberFormatException e) {
+            AutoAhConfig.axeClicksPerSecond = 200;
+        }
 
         AutoAhConfig.save();
         refreshButtons();
@@ -221,8 +231,8 @@ public class ConfigScreen extends Screen {
 
         int left = width / 2 - 190;
         int top = 28;
-        int right = left + 380;
-        int bottom = top + 248;
+        int right = left + WidgetMetrics.PANEL_WIDTH;
+        int bottom = top + WidgetMetrics.PANEL_HEIGHT;
 
         context.fill(left - 2, top - 2, right + 2, bottom + 2, 0xFF1A1A1A);
         context.fill(left, top, right, bottom, 0xCC101A2A);
@@ -232,19 +242,21 @@ public class ConfigScreen extends Screen {
 
         super.render(context, mouseX, mouseY, delta);
 
-        context.drawCenteredTextWithShadow(textRenderer, Text.literal("§l§bBotSnow AutoAH §dControl Center"), width / 2, top + 6, 0xFFFFFF);
-        context.drawTextWithShadow(textRenderer, Text.literal("Reguła " + (selectedIndex + 1) + "/" + AutoAhConfig.RULES.size()), left + 12, top + 6, 0xFFE082);
-        context.drawTextWithShadow(textRenderer, Text.literal("AutoAH: " + (AutoAhConfig.enabled ? "§aON" : "§cOFF") + "  (toggle w keybinds)"), left + 194, top + 6, 0xFFFFFF);
+        context.drawCenteredTextWithShadow(textRenderer, Text.literal(UiText.TITLE), width / 2, top + 6, WidgetTextPalette.WHITE);
+        context.drawTextWithShadow(textRenderer, Text.literal("Reguła " + (selectedIndex + 1) + "/" + AutoAhConfig.RULES.size()), left + 12, top + 6, WidgetTextPalette.GOLD);
+        context.drawTextWithShadow(textRenderer, Text.literal("AutoAH: " + (AutoAhConfig.enabled ? "§aON" : "§cOFF") + "  (toggle w keybinds)"), left + 194, top + 6, WidgetTextPalette.WHITE);
 
-        context.drawTextWithShadow(textRenderer, Text.literal("§eOstatnie 5 zakupów:"), left + 194, top + 208, 0xFFFFFF);
-        int rowY = top + 220;
+        LoopExecutionStats stats = AutoAhEngine.stats();
+        context.drawTextWithShadow(textRenderer, Text.literal("§7Refresh clicks: §f" + stats.totalRefreshClicks), left + 194, top + 194, WidgetTextPalette.WHITE);
+        context.drawTextWithShadow(textRenderer, Text.literal("§7Buy clicks: §f" + stats.totalBuyClicks), left + 194, top + 204, WidgetTextPalette.WHITE);
+
+        context.drawTextWithShadow(textRenderer, Text.literal(UiSectionTitles.LAST_PURCHASES), left + 194, top + 218, WidgetTextPalette.WHITE);
+        int rowY = top + 230;
         for (PurchaseRecord record : RuntimeState.getPurchases()) {
-            String when = record.timeEpochMs > 0 ? TIME_FORMAT.format(Instant.ofEpochMilli(record.timeEpochMs)) : "--:--:--";
-            String line = "§7[" + when + "] §a" + record.itemName + " §fza §6" + record.price;
-            context.drawTextWithShadow(textRenderer, Text.literal(line), left + 194, rowY, 0xFFFFFF);
+            context.drawTextWithShadow(textRenderer, Text.literal(HistoryRowFormatter.format(record)), left + 194, rowY, WidgetTextPalette.WHITE);
             rowY += 10;
         }
 
-        context.drawTextWithShadow(textRenderer, Text.literal("§7Middle Click = item z main-hand do reguły"), left + 12, top + 232, 0xFFFFFF);
+        context.drawTextWithShadow(textRenderer, Text.literal(UiHintMessages.MIDDLE_CLICK), left + 12, top + 232, WidgetTextPalette.WHITE);
     }
 }

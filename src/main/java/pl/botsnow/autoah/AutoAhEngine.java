@@ -9,14 +9,25 @@ import net.minecraft.screen.ScreenHandler;
 import net.minecraft.screen.slot.Slot;
 import net.minecraft.screen.slot.SlotActionType;
 import net.minecraft.text.Text;
-import net.minecraft.util.Identifier;
+import pl.botsnow.autoah.loop.LoopActionHistory;
+import pl.botsnow.autoah.loop.LoopActionLogEntry;
+import pl.botsnow.autoah.loop.LoopActionType;
+import pl.botsnow.autoah.loop.LoopClickExecutor;
+import pl.botsnow.autoah.loop.LoopClickSettings;
+import pl.botsnow.autoah.loop.LoopExecutionStats;
+import pl.botsnow.autoah.loop.LoopGuard;
+import pl.botsnow.autoah.loop.LoopRateLimiter;
+import pl.botsnow.autoah.loop.LoopTargetResolver;
 
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
 public class AutoAhEngine {
-    private static int clickCooldown = 0;
+    private static final LoopRateLimiter BUY_COOLDOWN = new LoopRateLimiter();
+    private static final LoopClickSettings CLICK_SETTINGS = new LoopClickSettings();
+    private static final LoopExecutionStats STATS = new LoopExecutionStats();
+    private static final LoopActionHistory ACTION_HISTORY = new LoopActionHistory(20);
 
     public static void toggle(PlayerEntity player) {
         AutoAhConfig.enabled = !AutoAhConfig.enabled;
@@ -27,11 +38,11 @@ public class AutoAhEngine {
     }
 
     public static void tick(MinecraftClient client) {
-        if (clickCooldown > 0) {
-            clickCooldown--;
+        if (!LoopGuard.canRun(client, AutoAhConfig.enabled)) {
+            return;
         }
 
-        if (!AutoAhConfig.enabled || client.player == null || client.interactionManager == null) {
+        if (!BUY_COOLDOWN.allow()) {
             return;
         }
 
@@ -39,9 +50,7 @@ public class AutoAhEngine {
             return;
         }
 
-        if (clickCooldown > 0) {
-            return;
-        }
+        CLICK_SETTINGS.clicksPerSecond = AutoAhConfig.axeClicksPerSecond;
 
         ScreenHandler handler = screen.getScreenHandler();
         spamRefreshAxe(client, handler);
@@ -65,52 +74,53 @@ public class AutoAhEngine {
             }
 
             client.interactionManager.clickSlot(handler.syncId, i, 0, SlotActionType.PICKUP, client.player);
+            ACTION_HISTORY.add(LoopActionLogEntry.of(LoopActionType.BUY, i));
+            STATS.addBuyClick();
 
-            int limeDyeSlot = findLimeDyeSlot(handler.slots);
+            int limeDyeSlot = findLimeDyeSlot(handler);
             if (limeDyeSlot >= 0) {
                 client.interactionManager.clickSlot(handler.syncId, limeDyeSlot, 0, SlotActionType.PICKUP, client.player);
+                ACTION_HISTORY.add(LoopActionLogEntry.of(LoopActionType.CONFIRM, limeDyeSlot));
             }
 
             PurchaseRecord record = new PurchaseRecord();
             record.itemName = stack.getName().getString();
+            record.itemId = Registries.ITEM.getId(stack.getItem()).toString();
             record.price = price;
             record.ruleName = rule.name;
             record.timeEpochMs = Instant.now().toEpochMilli();
+            record.sellerName = PurchaseDetailsExtractor.extractSeller(stack);
+            record.loreLines = PurchaseDetailsExtractor.extractLore(stack);
+            record.sourceScreen = screen.getTitle().getString();
             RuntimeState.addPurchase(record);
             AutoAhConfig.save();
 
-            WebhookNotifier.send("✅ Kupiono: " + record.itemName + " | cena: " + record.price + " | reguła: " + record.ruleName);
-            clickCooldown = 1;
+            WebhookNotifier.sendPurchase(record);
+            BUY_COOLDOWN.setCooldownTicks(1);
             return;
         }
     }
 
     private static void spamRefreshAxe(MinecraftClient client, ScreenHandler handler) {
-        for (int i = 0; i < handler.slots.size(); i++) {
-            ItemStack stack = handler.slots.get(i).getStack();
-            if (stack.isEmpty()) {
-                continue;
-            }
-            Identifier id = Registries.ITEM.getId(stack.getItem());
-            if ("minecraft:iron_axe".equals(id.toString())) {
-                client.interactionManager.clickSlot(handler.syncId, i, 1, SlotActionType.PICKUP, client.player);
-                client.interactionManager.clickSlot(handler.syncId, i, 0, SlotActionType.PICKUP, client.player);
-                return;
-            }
+        int slot = LoopTargetResolver.findSlotWithItem(handler, "minecraft:iron_axe");
+        if (slot < 0) {
+            return;
         }
+
+        int refreshClicks = LoopClickExecutor.clickBurst(client, handler, slot, CLICK_SETTINGS);
+        STATS.addRefreshClicks(refreshClicks);
+        ACTION_HISTORY.add(LoopActionLogEntry.of(LoopActionType.REFRESH, slot));
     }
 
-    private static int findLimeDyeSlot(List<Slot> slots) {
-        for (int i = 0; i < slots.size(); i++) {
-            ItemStack stack = slots.get(i).getStack();
-            if (stack.isEmpty()) {
-                continue;
-            }
-            Identifier id = Registries.ITEM.getId(stack.getItem());
-            if ("minecraft:lime_dye".equals(id.toString())) {
-                return i;
-            }
-        }
-        return -1;
+    private static int findLimeDyeSlot(ScreenHandler handler) {
+        return LoopTargetResolver.findSlotWithItem(handler, "minecraft:lime_dye");
+    }
+
+    public static LoopExecutionStats stats() {
+        return STATS;
+    }
+
+    public static List<LoopActionLogEntry> actionLog() {
+        return ACTION_HISTORY.snapshot();
     }
 }
